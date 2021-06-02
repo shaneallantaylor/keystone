@@ -13,6 +13,7 @@ import { AuthConfig, AuthGqlNames } from './types';
 import { getSchemaExtension } from './schema';
 import { signinTemplate } from './templates/signin';
 import { initTemplate } from './templates/init';
+import { omit } from '@keystone-next/utils-legacy';
 
 /**
  * createAuth function
@@ -212,14 +213,14 @@ export function createAuth<GeneratedListTypes extends BaseGeneratedListTypes>({
   };
 
   /**
-   * withItemData
+   * checkSessionValidity
    *
    * Automatically injects a session.data value with the authenticated item
    */
   /* TODO:
     - [ ] We could support additional where input to validate item sessions (e.g an isEnabled boolean)
   */
-  const withItemData = (
+  const validateSessionItem = (
     _sessionStrategy: SessionStrategy<Record<string, any>>
   ): SessionStrategy<{ listKey: string; itemId: string; data: any }> => {
     const { get, ...sessionStrategy } = _sessionStrategy;
@@ -227,32 +228,36 @@ export function createAuth<GeneratedListTypes extends BaseGeneratedListTypes>({
       ...sessionStrategy,
       get: async ({ req, createContext }) => {
         const session = await get({ req, createContext });
-        const sudoContext = createContext({}).sudo();
-        if (
-          !session ||
-          !session.listKey ||
-          session.listKey !== listKey ||
-          !session.itemId ||
-          !sudoContext.lists[session.listKey]
-        ) {
-          return;
+
+        // If there's no session, there's no session :-)
+        if (!session) return session;
+
+        // If the session doesn't have the keys we expect, we leave it alone,
+        // since someone else is probably managing it themselves.
+        if (!session.listKey || session.listKey !== listKey || !session.itemId) {
+          return session;
         }
 
-        // NOTE: This is wrapped in a try-catch block because a "not found" result will currently
-        // throw; I think this needs to be reviewed, but for now this prevents a system crash when
-        // the session item is invalid
+        // At this point, it looks like it's a session we're managing, so let's make it work
         try {
           // If no field selection is specified, just load the id. We still load the item,
           // because doing so validates that it exists in the database
-          const data = await sudoContext.lists[listKey].findOne({
-            where: { id: session.itemId },
-            query: sessionData || 'id',
-          });
+          const data = await createContext({})
+            .sudo()
+            .lists[listKey].findOne({
+              where: { id: session.itemId },
+              query: sessionData || 'id',
+            });
           return { ...session, itemId: session.itemId, listKey, data };
         } catch (e) {
           // TODO: This swallows all errors, we need a way to differentiate between "not found" and
           // actual exceptions that should be thrown
-          return;
+
+          // For whatever reason we couldn't find the user. Perhaps they've been deleted, perhaps
+          // it was never a valid session to begin with. Either way, the net result is we want to
+          // clear the flags we were manaing and return what's left.
+          const _s = omit(session, ['listKey', 'itemId']);
+          return _s;
         }
       },
     };
@@ -299,8 +304,8 @@ export function createAuth<GeneratedListTypes extends BaseGeneratedListTypes>({
       };
     }
     let session = keystoneConfig.session;
-    if (session && sessionData) {
-      session = withItemData(session);
+    if (session) {
+      session = validateSessionItem(session);
     }
     const existingExtendGraphQLSchema = keystoneConfig.extendGraphqlSchema;
     const listConfig = keystoneConfig.lists[listKey];
