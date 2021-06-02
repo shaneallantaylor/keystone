@@ -210,6 +210,11 @@ export function createAuth<GeneratedListTypes extends BaseGeneratedListTypes>({
         throw new Error(msg);
       }
     }
+
+    if (!keystoneConfig.session) {
+      const msg = `createAuth() was called with a config that does not specify a value for config.session.`
+      throw new Error(msg);
+    }
   };
 
   /**
@@ -302,15 +307,13 @@ export function createAuth<GeneratedListTypes extends BaseGeneratedListTypes>({
         },
       };
     }
-    if (!keystoneConfig.session) {
-      throw new Error('Sorry pal, you need sessions!');
-    }
+
     const existingExtendGraphQLSchema = keystoneConfig.extendGraphqlSchema;
     const listConfig = keystoneConfig.lists[listKey];
     return {
       ...keystoneConfig,
       ui,
-      session: validateSessionItem(keystoneConfig.session),
+      session: validateSessionItem(keystoneConfig.session!),
       // Add the additional fields to the references lists fields object
       // TODO: The fields we're adding here shouldn't naively replace existing fields with the same key
       // Leaving existing fields in place would allow solution devs to customise these field defs (eg. access control,
