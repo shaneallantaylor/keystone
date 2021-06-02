@@ -143,8 +143,7 @@ export function getAdminMetaSchema({
                 const sessionFunction =
                   lists[rootVal.listKey].fields[rootVal.fieldPath].ui?.itemView?.fieldMode ??
                   listConfig.ui?.itemView?.defaultFieldMode;
-                return runMaybeFunction(sessionFunction, 'edit', {
-                  session: context.session,
+                return runMaybeFunction(sessionFunction, 'edit', {                  session: context.session,
                   item,
                 });
               },

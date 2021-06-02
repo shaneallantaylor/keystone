@@ -213,16 +213,19 @@ export function createAuth<GeneratedListTypes extends BaseGeneratedListTypes>({
   };
 
   /**
-   * checkSessionValidity
+   * validateSessionItem
    *
-   * Automatically injects a session.data value with the authenticated item
+   * Validates the session ID by checking
+   *  a) Whether we're responsible for it (itemId exists and listKey matches), then
+   *  b) Whether the user exists in the system.
+   *
+   * If the user does exist, adds a session.data value to the session object.
+   * If they don't exist, we return an empty session.
+   *
    */
-  /* TODO:
-    - [ ] We could support additional where input to validate item sessions (e.g an isEnabled boolean)
-  */
   const validateSessionItem = (
     _sessionStrategy: SessionStrategy<Record<string, any>>
-  ): SessionStrategy<{ listKey: string; itemId: string; data: any }> => {
+  ): SessionStrategy<Record<string, any>> => {
     const { get, ...sessionStrategy } = _sessionStrategy;
     return {
       ...sessionStrategy,
@@ -244,20 +247,16 @@ export function createAuth<GeneratedListTypes extends BaseGeneratedListTypes>({
           // because doing so validates that it exists in the database
           const data = await createContext({})
             .sudo()
-            .lists[listKey].findOne({
-              where: { id: session.itemId },
-              query: sessionData || 'id',
-            });
-          return { ...session, itemId: session.itemId, listKey, data };
+            .lists[listKey].findOne({ where: { id: session.itemId }, query: sessionData || 'id' });
+          return { ...session, data };
         } catch (e) {
           // TODO: This swallows all errors, we need a way to differentiate between "not found" and
           // actual exceptions that should be thrown
 
           // For whatever reason we couldn't find the user. Perhaps they've been deleted, perhaps
           // it was never a valid session to begin with. Either way, the net result is we want to
-          // clear the flags we were manaing and return what's left.
-          const _s = omit(session, ['listKey', 'itemId']);
-          return _s;
+          // return an empty session, because the person did *not* have a valid session ID.
+          return undefined;
         }
       },
     };
@@ -298,21 +297,20 @@ export function createAuth<GeneratedListTypes extends BaseGeneratedListTypes>({
             accessingInitPage ||
             (keystoneConfig.ui?.isAccessAllowed
               ? keystoneConfig.ui.isAccessAllowed(context)
-              : context.session !== undefined)
+              : !!context.session?.data)
           );
         },
       };
     }
-    let session = keystoneConfig.session;
-    if (session) {
-      session = validateSessionItem(session);
+    if (!keystoneConfig.session) {
+      throw new Error('Sorry pal, you need sessions!');
     }
     const existingExtendGraphQLSchema = keystoneConfig.extendGraphqlSchema;
     const listConfig = keystoneConfig.lists[listKey];
     return {
       ...keystoneConfig,
       ui,
-      session,
+      session: validateSessionItem(keystoneConfig.session),
       // Add the additional fields to the references lists fields object
       // TODO: The fields we're adding here shouldn't naively replace existing fields with the same key
       // Leaving existing fields in place would allow solution devs to customise these field defs (eg. access control,
