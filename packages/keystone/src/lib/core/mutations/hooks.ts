@@ -1,4 +1,4 @@
-import { promiseAllRejectWithAllErrors } from '../utils';
+import { extensionError, promiseAllRejectWithExtensionError } from '../graphql-errors';
 
 export async function runSideEffectOnlyHook<
   HookName extends string,
@@ -21,6 +21,7 @@ export async function runSideEffectOnlyHook<
 
   // Only run field hooks on change operations if the field
   // was specified in the original input.
+  // FIXME: Should we make this the resolved data instead?
   let shouldRunFieldLevelHook: (fieldKey: string) => boolean;
   if (hookName === 'beforeChange' || hookName === 'afterChange') {
     const originalInputKeys = new Set(Object.keys(args.originalInput));
@@ -30,7 +31,8 @@ export async function runSideEffectOnlyHook<
   }
 
   // Field hooks
-  await promiseAllRejectWithAllErrors(
+  await promiseAllRejectWithExtensionError(
+    hookName,
     Object.entries(list.fields).map(async ([fieldKey, field]) => {
       if (shouldRunFieldLevelHook(fieldKey)) {
         await field.hooks[hookName]?.({ fieldPath: fieldKey, ...args });
@@ -39,5 +41,9 @@ export async function runSideEffectOnlyHook<
   );
 
   // List hooks
-  await list.hooks[hookName]?.(args);
+  try {
+    await list.hooks[hookName]?.(args);
+  } catch (err) {
+    throw extensionError(hookName, [err.message]);
+  }
 }
