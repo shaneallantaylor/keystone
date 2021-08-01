@@ -1,5 +1,5 @@
 {
-  "name": "@keystone-next/keystone",
+  "name": "@keystone-next/keystone-patch",
   "version": "9.3.0",
   "license": "MIT",
   "main": "dist/keystone.cjs.js",

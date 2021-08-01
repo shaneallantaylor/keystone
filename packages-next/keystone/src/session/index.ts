@@ -61,6 +61,8 @@ type StatelessSessionsOptions = {
    * @default '/'
    */
   path?: string;
+
+  sameSite?: true | false | 'lax' | 'strict' | 'none';
 };
 
 type FieldSelections = {
@@ -119,6 +121,7 @@ export function statelessSessions({
   secret,
   maxAge = MAX_AGE,
   path = '/',
+  sameSite,
   secure = process.env.NODE_ENV === 'production',
   ironOptions = Iron.defaults,
 }: StatelessSessionsOptions): () => SessionStrategy<Record<string, any>> {
@@ -148,7 +151,7 @@ export function statelessSessions({
             httpOnly: true,
             secure,
             path,
-            sameSite: 'lax',
+            sameSite,
           })
         );
       },
@@ -163,7 +166,7 @@ export function statelessSessions({
             httpOnly: true,
             secure,
             path,
-            sameSite: 'lax',
+            sameSite,
           })
         );
 
